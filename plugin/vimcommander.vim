@@ -1,116 +1,735 @@
 " vimcommander - (hopefully) vim + totalcommander-like file explorer for vim
+" vim: fdm=marker foldmarker=fu!,endf
 "
 " Author:  Leandro Penz
 " Date:    2003/11/01
 " Email:   lpenz AT terra DOT com DOT br
-" Version: $Id: vimcommander.vim,v 1.16 2003/11/07 02:28:21 lpenz Exp $
+" Version: $Id: vimcommander.vim,v 1.35 2003/11/09 17:14:14 lpenz Exp $
 "
 " Shameless using opsplorer.vim by Patrick Schiel.
 "
 
-" setup command
-com! -nargs=* -complete=dir VimCommander cal VimCommander(<f-args>)
 
-fu! ToggleShowVimCommander()
+fu! <SID>CommanderMappings()
+	"opsplorer legacy:
+	noremap <silent> <buffer> <LeftRelease> :cal <SID>OnClick()<CR>
+	noremap <silent> <buffer> <2-LeftMouse> :cal <SID>OnDoubleClick(-1)<CR>
+	noremap <silent> <buffer> <Space> :cal <SID>OnDoubleClick(0)<CR>
+	noremap <silent> <buffer> <CR> :cal <SID>OnDoubleClick(1)<CR>
+	noremap <silent> <buffer> <Down> :cal <SID>GotoNextEntry()<CR>
+	noremap <silent> <buffer> <Up> :cal <SID>GotoPrevEntry()<CR>
+	noremap <silent> <buffer> <S-Down> :cal <SID>GotoNextNode()<CR>
+	noremap <silent> <buffer> <S-Up> :cal <SID>GotoPrevNode()<CR>
+	noremap <silent> <buffer> <BS> :cal <SID>BuildParentTree()<CR>
+
+	"total-cmd keys:
+    noremap <silent> <buffer> <TAB>      :cal <SID>SwitchBuffer()<CR>
+    noremap <silent> <buffer> <F3>       :cal <SID>FileView()<CR>
+    noremap <silent> <buffer> <F4>       :cal <SID>FileEdit()<CR>
+    noremap <silent> <buffer> <S-F4>     :cal <SID>NewFileEdit()<CR>
+    noremap <silent> <buffer> <F7>       :cal <SID>DirCreate()<CR>
+    noremap <silent> <buffer> <C-Left>   :cal <SID>GetOrPutDir('l')<CR>
+    noremap <silent> <buffer> <C-Right>  :cal <SID>GetOrPutDir('r')<CR>
+    noremap <silent> <buffer> <S-Left>   :cal <SID>GetOrPutDir('l')<CR>
+    noremap <silent> <buffer> <S-Right>  :cal <SID>GetOrPutDir('r')<CR>
+    noremap <silent> <buffer> <M-O>      :cal <SID>PutDir()<CR>
+    noremap <silent> <buffer> <F5>       :cal <SID>FileCopy()<CR>
+    noremap <silent> <buffer> <F6>       :cal <SID>FileMove()<CR>
+    noremap <silent> <buffer> <F8>       :cal <SID>FileDelete()<CR>
+    noremap <silent> <buffer> <DEL>      :cal <SID>FileDelete()<CR>
+    noremap <silent> <buffer> <C-U>      :cal <SID>ExchangeDirs()<CR>
+    noremap <silent> <buffer> <C-R>      :cal <SID>RefreshDisplays()<CR>
+    noremap <silent> <buffer> <F10>      :cal VimCommanderToggle()<CR>
+    noremap <silent> <buffer> <F11>      :cal VimCommanderToggle()<CR>
+	noremap <silent> <buffer> <Insert>   :cal <SID>Select()<CR>
+	noremap <silent> <buffer> <C-kPlus>  :cal <SID>SelectPattern('*')<CR>
+	noremap <silent> <buffer> <C-kMinus> :cal <SID>DeSelectPattern('*')<CR>
+	noremap <silent> <buffer> <kPlus>  :cal <SID>SelectPatternAsk()<CR>
+	noremap <silent> <buffer> <kMinus> :cal <SID>DeSelectPatternAsk()<CR>
+
+    noremap <silent> <buffer> <C-F11>   :cal <SID>SetMatchPattern()<CR>
+    noremap <silent> <buffer> <C-O>     :cal VimCommanderToggle()<CR>
+
+endf
+
+fu! VimCommanderToggle()
 	if exists("g:vimcommander_loaded")
-		exe s:window_bufnrleft."bd"
-		exe s:window_bufnrright."bd"
-		unl g:vimcommander_loaded
+		if(g:vimcommander_loaded==1) " its on screen - close
+			cal <SID>Close()
+		el " its loaded, but not on screen
+			cal <SID>VimCommanderShow()
+		end
 	el
-		cal VimCommander()
+		cal <SID>First()
 	en
 endf
 
-fu! GotoVimCommander()
-	if exists("g:vimcommander_loaded")
-		let winnum = bufwinnr(g:vimcommander_lastwindow)
-		if winnum != -1
-			" Jump to the existing window
-			if winnr() != winnum
-				exe winnum . 'wincmd w'
-			endif
-		endif
-	el
-		cal VimCommander()
-	en
-endf
-
-fu! VimCommander(...)
-	" create explorer window
-	" take argument as path, if given
-	if a:0>0
-		let path=a:1
-	el
-		" otherwise current dir
-		let path=getcwd()
-	en
-	" substitute leading ~
-	" (doesn't work with isdirectory() otherwise!)
-	let path=fnamemodify(path,":p")
-	" expand, if relative path
-	if path[0]!="/"
-		let path=getcwd()."/".path
-	en
-	let path2=path
-	" setup options
+fu!<SID>First()
 	cal <SID>InitOptions()
+	let s:path_left=getcwd()
+	let s:path_right=getcwd()
+	let s:line_right=2
+	let s:line_left=2
+	let g:lastside="VimCommanderLeft"
+	cal <SID>VimCommanderShow()
+endf
+
+fu! <SID>VimCommanderShow()
+	if exists("g:vimcommander_loaded") && g:vimcommander_loaded==1 " on screen
+		return
+	end
+	"close all windows
+	let s:orig_buffer=bufname("")
+	let v:errmsg=''
+	while v:errmsg==''
+		silent! close
+	endwhile
+	"reset aucmd
+	autocmd! BufEnter VimCommanderLeft
+	autocmd! BufEnter VimCommanderRight
+	autocmd! BufWinLeave VimCommanderLeft
+	autocmd! BufWinLeave VimCommanderRight
 	" create new window
-	let winsize=&lines/2
+	let winsize=&lines
 	exe winsize." split VimCommanderRight"
-	let s:window_bufnrleft=winbufnr(0)
+	let s:bufnr_right=winbufnr(0)
 	" setup mappings, apply options, colors and draw tree
-	cal <SID>InitCommonOptions()
-	cal <SID>InitMappings()
-	cal <SID>InitColors()
-	cal <SID>BuildTree(path)
+	cal <SID>InitCommanderOptions()
+	cal <SID>CommanderMappings()
+	cal <SID>InitCommanderColors()
+	cal <SID>BuildTree(s:path_right)
+	exe s:line_right
 	exe "vs VimCommanderLeft"
-	let s:window_bufnrright=winbufnr(0)
-	let g:vimcommander_lastwindow="VimCommanderLeft"
-	cal <SID>InitCommonOptions()
-	cal <SID>InitMappings()
-	cal <SID>InitColors()
-	cal <SID>BuildTree(path2)
+	let s:bufnr_left=winbufnr(0)
+	cal <SID>InitCommanderOptions()
+	cal <SID>CommanderMappings()
+	cal <SID>InitCommanderColors()
+	cal <SID>BuildTree(s:path_left)
+	exe s:line_left
 	let g:vimcommander_loaded=1
-	autocmd BufEnter VimCommanderLeft let g:vimcommander_lastwindow="VimCommanderLeft"
-	autocmd BufEnter VimCommanderRight let g:vimcommander_lastwindow="VimCommanderRight"
+	"Goto vimcommander window
+	winc j
+	hide
+	let winnum = bufwinnr(g:lastside)
+	if winnum != -1
+		" Jump to the existing window
+		if winnr() != winnum
+			exe winnum . 'wincmd w'
+		endif
+	endif
+	norm z-
+	autocmd BufEnter    VimCommanderLeft  let g:lastside="VimCommanderLeft"
+	autocmd BufEnter    VimCommanderRight let g:lastside="VimCommanderRight"
+	autocmd BufWinLeave VimCommanderLeft  cal VimCommanderToggle()
+	autocmd BufWinLeave VimCommanderRight cal VimCommanderToggle()
 endf
 
-fu! <SID>MyPath()
-	let thisbuff=winbufnr(0)
-	if thisbuff == s:window_bufnrleft
-		return s:pathleft."/"
-	else
-		return s:pathright."/"
-	en
+fu! <SID>Close()
+	autocmd! BufEnter VimCommanderLeft
+	autocmd! BufEnter VimCommanderRight
+	autocmd! BufWinLeave VimCommanderLeft 
+	autocmd! BufWinLeave VimCommanderRight
+	let winnum = bufwinnr("VimCommanderLeft")
+	if winnum != -1
+		" Jump to the existing window
+		if winnr() != winnum
+			exe winnum . 'wincmd w'
+		endif
+	endif
+	let s:line_left=line('.')
+	silent! close
+	let winnum = bufwinnr("VimCommanderRight")
+	if winnum != -1
+		" Jump to the existing window
+		if winnr() != winnum
+			exe winnum . 'wincmd w'
+		endif
+	endif
+	let s:line_right=line('.')
+	silent! close
+	let g:vimcommander_loaded=0
+	if bufwinnr("VimCommanderRight")!=-1
+		exe "new +buffer ".s:orig_buffer
+		exe 'wincmd w'
+		close
+	end
 endf
 
-fu! <SID>OtherPath()
-	let thisbuff=winbufnr(0)
-	if thisbuff == s:window_bufnrleft
-		return s:pathright."/"
-	else
-		return s:pathleft."/"
+fu! <SID>InitCommanderOptions()
+	silent! setlocal noscrollbind
+	silent! setlocal nowrap
+	silent! setlocal nonu
+	silent! setlocal buftype=nofile
+	silent! setlocal bufhidden=delete
+	silent! setlocal noswapfile
+	silent! setlocal nobuflisted
+	silent! setlocal nonumber
+	silent! setlocal incsearch
+	let b:vimcommander_selected=""
+endf
+
+fu! <SID>InitCommanderColors()
+	sy clear
+	if s:use_colors
+		syntax match VimCommanderSelectedFile '^\s*<.*>$'
+		syntax match VimCommanderSelectedDir '<\w.*>$' contained
+		syntax match VimCommanderPath "^/.*"
+		syntax match VimCommanderDirLine "^[+-].*" transparent contains=VimCommanderSelectedDir,VimCommanderNode
+		syntax match VimCommanderNode "^[+-]" contained
+		syntax match VimCommanderFileLine "^\s*\w\w*.*$" transparent contains=ALL
+		syntax match VimCommanderFile "\w.*" contained
+		syntax match VimCommanderSource "^\s*\w\w*.*\.c$" contained
+		syntax match VimCommanderHeader "^\s*\w\w*.*\.h$" contained
+		syntax match VimCommanderSpecial "^\s*\(Makefile\|config.mk\)$" contained
+		hi link VimCommanderPath Label
+		hi link VimCommanderNode Comment
+		"hi link OpsFile Question
+		hi link VimCommanderFile Comment
+		hi link VimCommanderSource Question
+		hi link VimCommanderHeader Include
+		hi link VimCommanderSpecial Function
+		hi link VimCommanderSelectedFile Visual
+		hi link VimCommanderSelectedDir Visual
 	en
 endf
 
 fu! <SID>SwitchBuffer()
-	if winbufnr(0) == s:window_bufnrleft
-		winc h
-	else
+	if winbufnr(0) == s:bufnr_left
 		winc l
+	else
+		winc h
 	end
+endf
+
+fu! <SID>GetPathName(xpos,ypos)
+	let xpos=a:xpos
+	let ypos=a:ypos
+	" check for directory..
+	let line=getline(ypos)
+	" check selected
+	if line=~"\s*<.*>$"
+		let xpos=xpos+1
+	end
+	if getline(ypos)[xpos]=~"[+-]"
+		let path=strpart(getline(ypos),xpos+1,col('$'))
+	el
+		" otherwise filename
+		let path=strpart(getline(ypos),xpos,col('$'))
+		let xpos=xpos-1
+	en
+	if line=~"\s*<.*>$"
+		let path=strpart(path, 0, strlen(path)-1)
+	end
+	let path='/'.path
+	" walk up tree and append subpaths
+	" add base path
+	" not needed, if in root
+	if getline(1)!='/'
+		let path=getline(1).path
+	en
+	retu path
+endf
+
+fu! <SID>PathUnderCursor()
+	let xpos=col('.')-1
+	let ypos=line('.')
+	if ypos>1 "not on line 1
+		norm 1|g^
+		let xpos=col('.')-1
+		let rv=<SID>GetPathName(xpos,ypos)
+		return rv
+	end
+	return ""
+endf
+
+fu! <SID>ProvideBuffer()
+	"winc j
+	new
+endf
+
+fu! <SID>FileView()
+	let path=<SID>PathUnderCursor()
+	if(isdirectory(path))
+		return
+	end
+	cal <SID>ProvideBuffer()
+	exe "edit ".path
+	setl noma
+	setl ro
+	cal <SID>Close()
+endf
+
+fu! <SID>FileEdit()
+	let path=<SID>PathUnderCursor()
+	if(isdirectory(path))
+		return
+	end
+	cal <SID>ProvideBuffer()
+	exe "edit ".path
+	setl ma
+	setl noro
+	cal <SID>Close()
+endf
+
+fu! <SID>NewFileEdit()
+	let path=<SID>MyPath()
+	let newfile=<SID>PathUnderCursor()
+	if(isdirectory(newfile))
+		let newfile=path
+	end
+	let newfile=input("File to edit: ", newfile)
+	if newfile==""
+		return
+	end
+	if(isdirectory(newfile))
+		echo "Unable to edit file: directory with same name exists"
+		return
+	end
+	cal <SID>ProvideBuffer()
+	exe "edit ".newfile
+	setlocal ma
+	setlocal noro
+	cal <SID>Close()
+endf
+
+fu! <SID>MyPath()
+	if winbufnr(0) == s:bufnr_left
+		return s:path_left."/"
+	else
+		return s:path_right."/"
+	en
+endf
+
+fu! <SID>BuildTree(path)
+	let path=a:path
+	let b:vimcommander_selected=""
+	" clean up
+	setl ma
+	norm ggVGxo
+	" check if no unneeded trailing / is there
+	if strlen(path)>1&&path[strlen(path)-1]=="/"
+		let path=strpart(path,0,strlen(path)-1)
+	en
+	if(winbufnr(0)==s:bufnr_right)
+		let s:path_right=path
+	else
+		let s:path_left=path
+	end
+	cal setline(1,path)
+	setl noma nomod
+	" pass -1 as xpos to start at column 0
+	cal <SID>TreeExpand(-1,1,path)
+	" move to first entry
+	norm ggj1|g^
 endf
 
 fu! <SID>RefreshDisplays()
 	let line=line('.')
-	norm gg$
-	cal <SID>OnDoubleClick(-1)
-	cal <SID>SwitchBuffer()
-	norm gg$
-	cal <SID>OnDoubleClick(-1)
-	cal <SID>SwitchBuffer()
+	cal <SID>BuildTree(<SID>MyPath())
 	exec line
+	cal <SID>SwitchBuffer()
+	let line=line('.')
+	cal <SID>BuildTree(<SID>MyPath())
+	exec line
+	cal <SID>SwitchBuffer()
 endf
+
+fu! <SID>DirCreate()
+	norm 1|g^
+	let newdir=""
+	let newdir=input("New directory name: ","")
+	if filereadable(newdir)
+		echo "File with that name exists."
+		return
+	end
+	if isdirectory(newdir)
+		echo "Directory already exists."
+		return 
+	end
+	let i=system("mkdir ".<SID>MyPath().newdir)
+	cal <SID>RefreshDisplays()
+	norm gg1j
+	cal search("^+".newdir."$")
+endf
+
+fu! <SID>OtherPath()
+	if winbufnr(0) == s:bufnr_left
+		return s:path_right."/"
+	else
+		return s:path_left."/"
+	en
+endf
+
+fu! <SID>GetName(xpos,ypos)
+	let xpos=a:xpos
+	let ypos=a:ypos
+	" check for directory..
+	if getline(ypos)[xpos]=~"[+-]"
+		let path=strpart(getline(ypos),xpos+1,col('$'))
+	el
+		" otherwise filename
+		let path=strpart(getline(ypos),xpos,col('$'))
+		let xpos=xpos-1
+	en
+	retu path
+endf
+
+fu! <SID>FilenameUnderCursor()
+	norm 1|g^
+	let path=<SID>GetName(col('.')-1,line('.'))
+	if path=~"^<.*>$"
+		let path=strpart(path, 1, strlen(path)-2)
+	end
+	return path
+endf
+
+fu! <SID>NameUnderCursor()
+	norm 1|g^
+	return <SID>GetName(col('.')-1,line('.'))
+endf
+
+fu! <SID>FileCopy()
+	let i=0
+	if strlen(b:vimcommander_selected)>0
+		let name=<SID>SelectedNum(b:vimcommander_selected, i)
+		let filename=<SID>MyPath().name
+		let otherfilename=<SID>OtherPath().name
+		let i=i+1
+	else
+		let name=" "
+		let filename=<SID>PathUnderCursor()
+		let otherfilename=<SID>OtherPath().<SID>FilenameUnderCursor()
+	end
+	let opt="y"
+	while strlen(name)>0
+		if filereadable(filename) || isdirectory(filename)
+			if strlen(b:vimcommander_selected)==0
+				let newfilename=input("Copy ".filename." to: ",otherfilename)
+			else
+				let newfilename=otherfilename
+			end
+			if filereadable(filename) && isdirectory(newfilename)
+				echo "Can't overwrite directory ".newfilename." with file"
+				return
+			end
+			if isdirectory(filename) && filereadable(newfilename)
+				echo "Can't overwrite file ".newfilename." with directory"
+				return
+			end
+			if filereadable(newfilename)
+				if opt!~"^[AakK]$"
+					let opt=input("File ".newfilename." exists, overwrite? [nkya] ","y")
+					if opt==""
+						return
+					end
+				end
+				if opt=~"^[yYAa]$"
+					" copy file
+					cal system('cp -Rf "'.filename.'" "'.newfilename.'"')
+				en
+			el
+				" copy file
+				cal system('cp -Rf "'.filename.'" "'.newfilename.'"')
+			en
+		en
+		if strlen(b:vimcommander_selected)>0
+			let name=<SID>SelectedNum(b:vimcommander_selected, i)
+			let filename=<SID>MyPath().name
+			let otherfilename=<SID>OtherPath().name
+			let i=i+1
+		else
+			let name=""
+		end
+	endwhile
+	let b:vimcommander_selected=""
+	cal <SID>RefreshDisplays()
+endf
+
+fu! <SID>FileMove()
+	let i=0
+	if strlen(b:vimcommander_selected)>0
+		let name=<SID>SelectedNum(b:vimcommander_selected, i)
+		let filename=<SID>MyPath().name
+		let otherfilename=<SID>OtherPath().name
+		let i=i+1
+	else
+		let name=" "
+		let filename=<SID>PathUnderCursor()
+		let otherfilename=<SID>OtherPath().<SID>FilenameUnderCursor()
+	end
+	let opt='y'
+	while strlen(name)>0
+		if filereadable(filename) || isdirectory(filename)
+			if strlen(b:vimcommander_selected)==0
+				let newfilename=input("Move ".filename." to: ",otherfilename)
+			else
+				let newfilename=otherfilename
+			end
+			if filereadable(filename) && isdirectory(newfilename)
+				echo "Can't overwrite directory with file"
+				return
+			end
+			if isdirectory(filename) && filereadable(newfilename)
+				echo "Can't overwrite file with directory"
+				return
+			end
+			if isdirectory(filename) && isdirectory(newfilename)
+				echo "Can't overwrite directory with directory"
+				return
+			end
+			if filereadable(newfilename)
+				if opt!~"^[AakK]$"
+					let opt=input("File ".newfilename." exists, overwrite? [nkya] ","y")
+					if opt==""
+						return
+					end
+				end
+				if opt=~"^[yYAa]$"
+					" move file
+					system('mv -f "'.filename.'" "'.newfilename.'"')
+				en
+			el
+				" move file
+				system('mv "'.filename.'" "'.newfilename.'"')
+			en
+		en
+		if strlen(b:vimcommander_selected)>0
+			let name=<SID>SelectedNum(b:vimcommander_selected, i)
+			let filename=<SID>MyPath().name
+			let otherfilename=<SID>OtherPath().name
+			let i=i+1
+		else
+			let name=""
+		end
+	endwhile
+	let b:vimcommander_selected=""
+	cal <SID>RefreshDisplays()
+endf
+
+fu! <SID>FileDelete()
+	let i=0
+	if strlen(b:vimcommander_selected)>0
+		let name=<SID>SelectedNum(b:vimcommander_selected, i)
+		let filename=<SID>MyPath().name
+		let i=i+1
+	else
+		let name=" "
+		let filename=<SID>PathUnderCursor()
+	end
+	let opt=""
+	while strlen(name)>0
+		if filereadable(filename) || isdirectory(filename)
+			if opt!~"^[AakK]$"
+				let opt=input("OK to delete ".fnamemodify(filename,":t")."? [nkya] ","y")
+				if opt==""
+					return
+				end
+			end
+			if opt=~"^[yYAa]$"
+				cal system('rm -rf "'.filename.'"')
+			en
+		en
+		if strlen(b:vimcommander_selected)>0
+			let name=<SID>SelectedNum(b:vimcommander_selected, i)
+			let filename=<SID>MyPath().name
+			let i=i+1
+		else
+			let name=""
+		end
+	endwhile
+	let b:vimcommander_selected=""
+	cal <SID>RefreshDisplays()
+endf
+
+fu! <SID>PutDir()
+	let mypath=<SID>MyPath()
+	cal <SID>SwitchBuffer()
+	cal <SID>BuildTree(mypath)
+	cal <SID>SwitchBuffer()
+	cal <SID>RefreshDisplays()
+endf
+
+fu! <SID>GetOrPutDir(dir)
+	if a:dir=='l' && winbufnr(0)==s:bufnr_left " left and left - getdir
+		cal <SID>BuildTree(<SID>OtherPath())
+		return
+	end
+	if a:dir=='r' && winbufnr(0)==s:bufnr_right " right and right - getdir
+		cal <SID>BuildTree(<SID>OtherPath())
+		return
+	end
+	" Crossed - putdir
+	let path=<SID>PathUnderCursor()
+	if !isdirectory(path)
+		return
+	end
+	cal <SID>SwitchBuffer()
+	cal <SID>BuildTree(path)
+	cal <SID>SwitchBuffer()
+	cal <SID>RefreshDisplays()
+endf
+
+fu! <SID>ExchangeDirs()
+	let pathtmp=s:path_left
+	let s:path_left=s:path_right
+	let s:path_right=pathtmp
+	let myline=line('.')
+	cal <SID>BuildTree(<SID>MyPath())
+	cal <SID>SwitchBuffer()
+	cal <SID>BuildTree(<SID>MyPath())
+	exec myline
+	cal <SID>RefreshDisplays()
+endf
+
+fu! <SID>SelectedNum(str,idx)
+	let mystr=a:str
+	let i=0
+	wh i<a:idx
+		let mystr=strpart(mystr,1)
+		let pos=stridx(mystr, "<")
+		if pos==-1
+			return ""
+		end
+		let mystr=strpart(mystr, pos)
+		let i=i+1
+	endwh
+	let pos=stridx(mystr, ">")
+	let mystr=strpart(mystr, 1, pos-1)
+	return mystr
+endf
+
+fu! <SID>Select()
+	let name=<SID>NameUnderCursor()
+	if  name =~ "^+*<\w*.*>$" " deselected
+		let name=strpart(name, 1, strlen(name)-2)
+		let tmp=""
+		let found=<SID>SelectedNum(b:vimcommander_selected, 0)
+		let i=1
+		while found!=""
+			if found!=name
+				if tmp!=""
+					let tmp=tmp.' '
+				end
+				let tmp=tmp.'<'.found.'>'
+			end
+			let found=<SID>SelectedNum(b:vimcommander_selected, i)
+			let i=i+1
+		endwhile
+		let b:vimcommander_selected=tmp
+		setl ma
+		norm 1|g^
+		if getline(line('.'))[0]=='+'
+			norm l
+		end
+		norm x
+		norm $x
+		norm 1|g^
+		setl noma
+		norm j
+	else " select
+		if b:vimcommander_selected==""
+			let b:vimcommander_selected='<'.<SID>NameUnderCursor().'>'
+		else
+			let b:vimcommander_selected=b:vimcommander_selected." <".<SID>NameUnderCursor().">"
+		end
+		setl ma
+		norm ^
+		if getline(line('.'))[0]=='+'
+			norm l
+		end
+		norm i<
+		norm A>
+		setl noma
+		norm 1|g^
+		norm j
+	end
+endf
+
+fu! <SID>SelectPattern(pattern)
+	let origdirlist=''
+	let path=<SID>MyPath()
+	if s:show_hidden_files
+		let dirlistorig=glob(path.'/.*'.a:pattern)."\n"
+	en
+	let origdirlist=origdirlist.globpath(path, a:pattern)."\n"
+	let myline=line('.')
+	norm G
+	let lastline=line('.')
+	norm gg
+	norm j
+	while line('.')<lastline
+		let dirlist=strpart(origdirlist,0)
+		wh strlen(dirlist)>0
+			" get next line
+			let entry=<SID>GetNextLine(dirlist)
+			let dirlist=<SID>CutFirstLine(dirlist)
+			" only files
+			if entry!="." && entry!=".." && entry!=""
+				"echo "cursor in ".<SID>PathUnderCursor()." entry ".entry." len ".strlen(dirlist)
+				if entry==<SID>PathUnderCursor()
+					cal <SID>Select()
+					norm k
+					let dirlist=""
+					continue
+				end
+			en
+		endw
+		norm j
+	endwhile
+	exe myline
+endf
+
+fu! <SID>DeSelectPattern(pattern)
+	let origdirlist=''
+	let path=<SID>MyPath()
+	if s:show_hidden_files
+		let dirlistorig=glob(path.'/.*'.a:pattern)."\n"
+	en
+	let origdirlist=origdirlist.globpath(path, a:pattern)."\n"
+	let myline=line('.')
+	norm G
+	let lastline=line('.')
+	norm gg
+	norm j
+	while line('.')<lastline
+		let dirlist=strpart(origdirlist,0)
+		let path=<SID>NameUnderCursor()
+		if path=~"^<.*>$"
+			let path=<SID>MyPath().strpart(path,1,strlen(path)-2)
+			wh strlen(dirlist)>0
+				" get next line
+				let entry=<SID>GetNextLine(dirlist)
+				let dirlist=<SID>CutFirstLine(dirlist)
+				" only files
+				if entry!="." && entry!=".." && entry!=""
+					" echo "cursor in ".path." entry ".entry." len ".strlen(dirlist)
+					if entry==path
+						cal <SID>Select()
+						norm k
+						let dirlist=""
+						continue
+					end
+				end
+			endw
+		end
+		norm j
+	endwhile
+	exe myline
+endf
+
+fu! <SID>SelectPatternAsk()
+	let pattern=input("Select with pattern: ",'*')
+	cal <SID>SelectPattern(pattern)
+	echo ""
+endf
+
+fu! <SID>DeSelectPatternAsk()
+	let pattern=input("Deselect with pattern: ",'*')
+	cal <SID>DeSelectPattern(pattern)
+	echo ""
+endf
+
+"== From Opsplorer: ==========================================================
 
 fu! <SID>InitOptions()
 	let s:single_click_to_edit=0
@@ -122,144 +741,6 @@ fu! <SID>InitOptions()
 	let s:split_minwidth=1
 	let s:use_colors=1
 	let s:close_explorer_after_open=0
-endf
-
-fu! <SID>InitMappings()
-	noremap <silent> <buffer> <LeftRelease> :cal <SID>OnClick()<CR>
-	noremap <silent> <buffer> <2-LeftMouse> :cal <SID>OnDoubleClick(-1)<CR>
-	noremap <silent> <buffer> <Space> :cal <SID>OnDoubleClick(0)<CR>
-	noremap <silent> <buffer> <CR> :cal <SID>OnDoubleClick(1)<CR>
-	noremap <silent> <buffer> <Down> :cal <SID>GotoNextEntry()<CR>
-	noremap <silent> <buffer> <Up> :cal <SID>GotoPrevEntry()<CR>
-	noremap <silent> <buffer> <S-Down> :cal <SID>GotoNextNode()<CR>
-	noremap <silent> <buffer> <S-Up> :cal <SID>GotoPrevNode()<CR>
-	noremap <silent> <buffer> <BS> :cal <SID>BuildParentTree()<CR>
-	"noremap <silent> <buffer> n :cal <SID>InsertFilename()<CR>
-	"noremap <silent> <buffer> p :cal <SID>InsertFileContent()<CR>
-	"noremap <silent> <buffer> s :cal <SID>FileSee()<CR>
-	"noremap <silent> <buffer> N :cal <SID>FileRename()<CR>
-	"noremap <silent> <buffer> D :cal <SID>FileDelete()<CR>
-	"noremap <silent> <buffer> C :cal <SID>FileCopy()<CR>
-	"noremap <silent> <buffer> O :cal <SID>FileMove()<CR>
-	"noremap <silent> <buffer> H :cal <SID>ToggleShowHidden()<CR>
-	"total-cmd keys:
-	noremap <silent> <buffer> <TAB> :cal <SID>SwitchBuffer()<CR>
-	noremap <silent> <buffer> <DEL> :cal <SID>FileDelete()<CR>
-	noremap <silent> <buffer> <F3> :cal <SID>OnDoubleClick(2)<CR>
-	noremap <silent> <buffer> <F4> :cal <SID>OnDoubleClick(0)<CR>
-	noremap <silent> <buffer> <F5> :cal <SID>FileCopy()<CR>
-	noremap <silent> <buffer> <F6> :cal <SID>FileMove()<CR>
-	noremap <silent> <buffer> <F7> :cal <SID>DirCreate()<CR>
-	noremap <silent> <buffer> <F10> :cal <SID>CloseExplorer()<CR>
-	noremap <silent> <buffer> <F11> <C-W>j
-	noremap <silent> <buffer> <C-F11> :cal <SID>SetMatchPattern()<CR>
-	noremap <silent> <buffer> <C-U> :cal <SID>ExchangeDirs()<CR>
-	noremap <silent> <buffer> <C-R> :cal <SID>RefreshDisplays()<CR>
-	noremap <silent> <buffer> <C-Left> :cal <SID>PutDir(0)<CR>
-	noremap <silent> <buffer> <C-Right> :cal <SID>PutDir(1)<CR>
-endf
-
-fu! <SID>InitCommonOptions()
-	setl noscrollbind
-	setl nowrap
-	setl nonu
-    silent! setlocal buftype=nofile
-    silent! setlocal bufhidden=delete
-    silent! setlocal noswapfile
-	silent! setlocal nobuflisted
-    silent! setlocal nonumber
-endf
-
-fu! <SID>InitColors()
-	sy clear
-	if s:use_colors
-		syn match OpsPath "^/.*"
-		syn match OpsNode "^\s*[+-]"
-		syn match OpsFile "^\s*\w\w*.*$"
-		syn match OpsSource "^\s*\w\w*.*\.c$"
-		syn match OpsHeader "^\s*\w\w*.*\.h$"
-		syn match OpsSpecial "^\s*\(Makefile\|config.mk\)$"
-		hi link OpsPath Label
-		hi link OpsNode Comment
-		"hi link OpsFile Question
-		hi link OpsFile Comment
-		hi link OpsSource Question
-		hi link OpsHeader Include
-		hi link OpsSpecial Function
-	en
-endf
-
-fu! <SID>Opsplore(...)
-	" create explorer window
-	" take argument as path, if given
-	if a:0>0
-		let path=a:1
-	el
-		" otherwise current dir
-		let path=getcwd()
-	en
-	" substitute leading ~
-	" (doesn't work with isdirectory() otherwise!)
-	let path=fnamemodify(path,":p")
-	" expand, if relative path
-	if path[0]!="/"
-		let path=getcwd()."/".path
-	en
-	" setup options
-	cal <SID>InitOptions()
-	" create new window
-	let splitcmd='new'
-	if s:split_vertical
-		let splitcmd='vne'
-	en
-	let splitcmd=s:split_width.splitcmd
-	exe splitcmd
-	exe "setl wiw=".s:split_minwidth
-	" remember buffer nr
-	let s:window_bufnr=winbufnr(0)
-	" setup mappings, apply options, colors and draw tree
-	cal <SID>InitCommonOptions()
-	cal <SID>InitMappings()
-	cal <SID>InitColors()
-	cal <SID>BuildTree(path)
-	let g:opsplorer_loaded=1
-endf
-
-fu! <SID>ToggleShowExplorer()
-	if exists("g:opsplorer_loaded")
-		exe s:window_bufnr."bd"
-		unl g:opsplorer_loaded
-	el
-		cal <SID>Opsplore()
-	en
-endf
-
-fu! <SID>CloseExplorer()
-	exe s:window_bufnrleft."bd"
-	exe s:window_bufnrright."bd"
-	unl g:vimcommander_loaded
-endf
-
-fu! <SID>BuildTree(path)
-	let path=a:path
-	" clean up
-	setl ma
-	norm ggVGxo
-	" check if no unneeded trailing / is there
-	if strlen(path)>1&&path[strlen(path)-1]=="/"
-		let path=strpart(path,0,strlen(path)-1)
-	en
-	if(winbufnr(0)==s:window_bufnrleft)
-		let s:pathleft=path
-	else
-		let s:pathright=path
-	end
-	cal setline(1,path)
-	setl noma nomod
-	" pass -1 as xpos to start at column 0
-	cal <SID>TreeExpand(-1,1,path)
-	" move to first entry
-	norm ggj1|g^
 endf
 
 fu! <SID>InsertFilename()
@@ -278,153 +759,11 @@ fu! <SID>InsertFileContent()
 	en
 endf
 
-fu! <SID>DirCreate()
-	norm 1|g^
-	let newdir=""
-	let newdir=input("New directory name: ","")
-	if filereadable(newdir)
-		echo "File with that name exists."
-		return
-	end
-	if isdirectory(newdir)
-		echo "Directory already exists."
-		return 
-	end
-	let i=system("mkdir ".newdir)
-	cal <SID>RefreshDisplays()
-endf
-
 fu! <SID>FileSee()
 	norm 1|g^
 	let filename=<SID>GetPathName(col('.')-1,line('.'))
 	if filereadable(filename)
 		let i=system("see ".filename."&")
-	en
-endf
-
-fu! <SID>FileRename()
-	norm 1|g^
-	let filename = <SID>GetPathName(col('.')-1,line('.'))
-	if filereadable(filename)
-		let newfilename=input("Rename to: ",filename)
-		if filereadable(newfilename)
-			if input("File exists, overwrite?")=~"^[yY]"
-				setl ma
-				let i=system("mv -f ".filename." ".newfilename)
-				" refresh display
-				cal <SID>RefreshDisplays()
-			en
-		el
-			" rename file
-			setl ma
-			let i=system("mv ".filename." ".newfilename)
-			cal <SID>RefreshDisplays()
-		en
-	en
-endf
-
-fu! <SID>PutDir(dir)
-	let thisbuff=winbufnr(0)
-	if thisbuff == s:window_bufnrleft && a:dir==1
-		return
-	end
-	if thisbuff == s:window_bufnrright && a:dir==0
-		return
-	end
-	norm 1|g^
-	let xpos=col('.')-1
-	let ypos=line('.')
-	" check, if it's a directory
-	let path=<SID>GetPathName(xpos,ypos)
-	if !isdirectory(path)
-		return 
-	end
-	cal <SID>SwitchBuffer()
-	cal <SID>BuildTree(path)
-	cal <SID>SwitchBuffer()
-	cal <SID>RefreshDisplays()
-endf
-
-fu! <SID>ExchangeDirs()
-	let pathtmp=s:pathleft
-	let s:pathleft=s:pathright
-	let s:pathright=pathtmp
-	let myline=line('.')
-	cal <SID>BuildTree(<SID>MyPath())
-	cal <SID>SwitchBuffer()
-	cal <SID>BuildTree(<SID>MyPath())
-	exec myline
-	cal <SID>RefreshDisplays()
-endf
-
-fu! <SID>FileMove()
-	norm 1|g^
-	let filename=<SID>GetPathName(col('.')-1,line('.'))
-	let otherfilename=<SID>OtherPath().<SID>GetName(col('.')-1,line('.'))
-	if filereadable(filename) || isdirectory(filename)
-		let newfilename=input("Move to: ",otherfilename)
-		if filereadable(filename) && isdirectory(newfilename)
-			echo "Can't overwrite directory with file"
-			return
-		end
-		if isdirectory(filename) && filereadable(newfilename)
-			echo "Can't overwrite file with directory"
-			return
-		end
-		if isdirectory(filename) && isdirectory(newfilename)
-			echo "Can't overwrite directory with directory"
-			return
-		end
-		if filereadable(newfilename)
-			if input("File exists, overwrite? ")=~"^[yY]"
-				" move file
-				let i=system('mv -f "'.filename.'" "'.newfilename.'"')
-			en
-		el
-			" move file
-			let i=system('mv "'.filename.'" "'.newfilename.'"')
-		en
-		cal <SID>RefreshDisplays()
-	en
-endf
-
-fu! <SID>FileCopy()
-	norm 1|g^
-	let filename=<SID>GetPathName(col('.')-1,line('.'))
-	let otherfilename=<SID>OtherPath().<SID>GetName(col('.')-1,line('.'))
-	if filereadable(filename) || isdirectory(filename)
-		let newfilename=input("Copy to: ",otherfilename)
-		if filereadable(filename) && isdirectory(newfilename)
-			echo "Can't overwrite directory with file"
-			return
-		end
-		if isdirectory(filename) && filereadable(newfilename)
-			echo "Can't overwrite file with directory"
-			return
-		end
-		if filereadable(newfilename)
-			if input("File exists, overwrite? ")=~"^[yY]"
-				" copy file
-				let i=system('cp -Rf "'.filename.'" "'.newfilename.'"')
-			en
-		el
-			" copy file
-			let i=system('cp -Rf "'.filename.'" "'.newfilename.'"')
-		en
-		cal <SID>RefreshDisplays()
-	en
-endf
-
-fu! <SID>FileDelete()
-	norm 1|g^
-	let filename=<SID>GetPathName(col('.')-1,line('.'))
-	if filereadable(filename) || isdirectory(filename)
-		if input("OK to delete ".fnamemodify(filename,":t")."? ","y")[0]=~"[yY]"
-			let i=system('rm -rf "'.filename.'"')
-			setl ma
-			norm ddg^
-			setl noma
-		en
 	en
 endf
 
@@ -522,109 +861,61 @@ fu! <SID>OnDoubleClick(close_explorer)
 	"if <SID>IsTreeNode(xpos,ypos)
 	"	cal <SID>TreeNodeAction(xpos,ypos)
 	"el
-		" go to first non-blank when line>1
-		if ypos>1
-			norm 1|g^
-			let xpos=col('.')-1
-			" check, if it's a directory
-			let path=<SID>GetPathName(xpos,ypos)
-			if isdirectory(path)
-				" build new root structure
-				cal <SID>BuildTree(path)
-				"exe "cd ".getline(1)
-			el
-				" try to resolve filename
-				" and open in other window
-				let path=<SID>GetPathName(xpos,ypos)
-				if filereadable(path)
-					" go to last accessed buffer
-					winc j
-					" append sequence for opening file
-					"exe "cd ".fnamemodify(path,":h")
-					exe "e ".path
-					if s:close_explorer==2
-						setl noma
-					else
-						setl ma
-					end
-				en
-				if s:close_explorer==1
-					cal ToggleShowVimCommander()
-				en
-			en
+	" go to first non-blank when line>1
+	if ypos>1
+		norm 1|g^
+		let xpos=col('.')-1
+		" check, if it's a directory
+		let path=<SID>GetPathName(xpos,ypos)
+		if isdirectory(path)
+			" build new root structure
+			cal <SID>BuildTree(path)
+			"exe "cd ".getline(1)
 		el
-			" we're on line 1 here! getting new base path now...
-			" advance to next slash
-			if getline(1)[xpos]!="/"
-				norm f/
-				" no next slash -> current directory, just rebuild
-				if col('.')-1==xpos
-					cal <SID>BuildTree(getline(1))
-					"exe "cd ".getline(1)
-					retu
-				en
+			" try to resolve filename
+			" and open in other window
+			let path=<SID>GetPathName(xpos,ypos)
+			if filereadable(path)
+				" go to last accessed buffer
+				winc j
+				" append sequence for opening file
+				"exe "cd ".fnamemodify(path,":h")
+				exe "e ".path
+				if s:close_explorer==2 "eh view
+					setl noma
+					setl ro
+				else
+					setl ma
+					setl noro
+				end
 			en
-			" cut ending slash
-			norm h
-			" rebuild tree with new path
-			cal <SID>BuildTree(strpart(getline(1),0,col('.')))
+			if s:close_explorer==1
+				cal VimCommanderToggle()
+			en
 		en
-	"en
-endf
-
-fu! <SID>GetName(xpos,ypos)
-	let xpos=a:xpos
-	let ypos=a:ypos
-	" check for directory..
-	if getline(ypos)[xpos]=~"[+-]"
-		let path=strpart(getline(ypos),xpos+1,col('$'))
 	el
-		" otherwise filename
-		let path=strpart(getline(ypos),xpos,col('$'))
-		let xpos=xpos-1
-	en
-	retu path
-endf
-
-fu! <SID>GetPathName(xpos,ypos)
-	let xpos=a:xpos
-	let ypos=a:ypos
-	" check for directory..
-	if getline(ypos)[xpos]=~"[+-]"
-		let path='/'.strpart(getline(ypos),xpos+1,col('$'))
-	el
-		" otherwise filename
-		let path='/'.strpart(getline(ypos),xpos,col('$'))
-		let xpos=xpos-1
-	en
-	" walk up tree and append subpaths
-	let row=ypos-1
-	let indent=xpos
-	wh indent>0
-		" look for prev ident level
-		let indent=indent-1
-		wh getline(row)[indent] != '-'
-			let row=row-1
-			if row == 0
-				retu ""
+		" we're on line 1 here! getting new base path now...
+		" advance to next slash
+		if getline(1)[xpos]!="/"
+			norm f/
+			" no next slash -> current directory, just rebuild
+			if col('.')-1==xpos
+				cal <SID>BuildTree(getline(1))
+				"exe "cd ".getline(1)
+				retu
 			en
-		endw
-		" subpath found, append
-		let path='/'.strpart(getline(row),indent+1,strlen(getline(row))).path
-	endw 
-	" finally add base path
-	" not needed, if in root
-	if getline(1)!='/'
-		let path=getline(1).path
+		en
+		" cut ending slash
+		norm h
+		" rebuild tree with new path
+		cal <SID>BuildTree(strpart(getline(1),0,col('.')))
 	en
-	retu path
+	"en
 endf
 
 fu! <SID>TreeExpand(xpos,ypos,path)
 	let path=a:path
 	setl ma
-	" turn + into -
-	"norm r-
 	" first get all subdirectories
 	let dirlist=""
 	" extra globbing for hidden files
@@ -729,40 +1020,6 @@ fu! <SID>CutFirstLine(text)
 	retu strpart(a:text,pos+1,strlen(a:text))
 endf
 
-fu! <SID>GetPathName(xpos,ypos)
-	let xpos=a:xpos
-	let ypos=a:ypos
-	" check for directory..
-	if getline(ypos)[xpos]=~"[+-]"
-		let path='/'.strpart(getline(ypos),xpos+1,col('$'))
-	el
-		" otherwise filename
-		let path='/'.strpart(getline(ypos),xpos,col('$'))
-		let xpos=xpos-1
-	en
-	" walk up tree and append subpaths
-	let row=ypos-1
-	let indent=xpos
-	wh indent>0
-		" look for prev ident level
-		let indent=indent-1
-		wh getline(row)[indent] != '-'
-			let row=row-1
-			if row == 0
-				retu ""
-			en
-		endw
-		" subpath found, append
-		let path='/'.strpart(getline(row),indent+1,strlen(getline(row))).path
-	endw 
-	" finally add base path
-	" not needed, if in root
-	if getline(1)!='/'
-		let path=getline(1).path
-	en
-	retu path
-endf
-
 fu! <SID>SpaceString(width)
 	let spacer=""
 	let width=a:width
@@ -772,4 +1029,5 @@ fu! <SID>SpaceString(width)
 	endw
 	retu spacer
 endf
+
 
