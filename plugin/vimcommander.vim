@@ -4,7 +4,7 @@
 " Author:  Leandro Penz
 " Date:    2003/11/01
 " Email:   lpenz AT terra DOT com DOT br
-" Version: $Id: vimcommander.vim,v 1.35 2003/11/09 17:14:14 lpenz Exp $
+" Version: $Id: vimcommander.vim,v 1.39 2003/11/13 01:22:46 lpenz Exp $
 "
 " Shameless using opsplorer.vim by Patrick Schiel.
 "
@@ -23,32 +23,41 @@ fu! <SID>CommanderMappings()
 	noremap <silent> <buffer> <BS> :cal <SID>BuildParentTree()<CR>
 
 	"total-cmd keys:
-    noremap <silent> <buffer> <TAB>      :cal <SID>SwitchBuffer()<CR>
-    noremap <silent> <buffer> <F3>       :cal <SID>FileView()<CR>
-    noremap <silent> <buffer> <F4>       :cal <SID>FileEdit()<CR>
-    noremap <silent> <buffer> <S-F4>     :cal <SID>NewFileEdit()<CR>
-    noremap <silent> <buffer> <F7>       :cal <SID>DirCreate()<CR>
-    noremap <silent> <buffer> <C-Left>   :cal <SID>GetOrPutDir('l')<CR>
-    noremap <silent> <buffer> <C-Right>  :cal <SID>GetOrPutDir('r')<CR>
-    noremap <silent> <buffer> <S-Left>   :cal <SID>GetOrPutDir('l')<CR>
-    noremap <silent> <buffer> <S-Right>  :cal <SID>GetOrPutDir('r')<CR>
-    noremap <silent> <buffer> <M-O>      :cal <SID>PutDir()<CR>
-    noremap <silent> <buffer> <F5>       :cal <SID>FileCopy()<CR>
-    noremap <silent> <buffer> <F6>       :cal <SID>FileMove()<CR>
-    noremap <silent> <buffer> <F8>       :cal <SID>FileDelete()<CR>
-    noremap <silent> <buffer> <DEL>      :cal <SID>FileDelete()<CR>
-    noremap <silent> <buffer> <C-U>      :cal <SID>ExchangeDirs()<CR>
-    noremap <silent> <buffer> <C-R>      :cal <SID>RefreshDisplays()<CR>
-    noremap <silent> <buffer> <F10>      :cal VimCommanderToggle()<CR>
-    noremap <silent> <buffer> <F11>      :cal VimCommanderToggle()<CR>
-	noremap <silent> <buffer> <Insert>   :cal <SID>Select()<CR>
-	noremap <silent> <buffer> <C-kPlus>  :cal <SID>SelectPattern('*')<CR>
-	noremap <silent> <buffer> <C-kMinus> :cal <SID>DeSelectPattern('*')<CR>
-	noremap <silent> <buffer> <kPlus>  :cal <SID>SelectPatternAsk()<CR>
-	noremap <silent> <buffer> <kMinus> :cal <SID>DeSelectPatternAsk()<CR>
+	noremap <silent> <buffer> <TAB>            :cal <SID>SwitchBuffer()<CR>
+	noremap <silent> <buffer> <F3>             :cal <SID>FileView()<CR>
+	noremap <silent> <buffer> <F4>             :cal <SID>FileEdit()<CR>
+	noremap <silent> <buffer> <S-F4>           :cal <SID>NewFileEdit()<CR>
+	noremap <silent> <buffer> <leader><F4>     :cal <SID>NewFileEdit()<CR>
+	noremap <silent> <buffer> <F7>             :cal <SID>DirCreate()<CR>
+	noremap <silent> <buffer> <leader><Left>   :cal <SID>GetOrPutDir('l')<CR>
+	noremap <silent> <buffer> <leader><Right>  :cal <SID>GetOrPutDir('r')<CR>
+	noremap <silent> <buffer> <C-Left>         :cal <SID>GetOrPutDir('l')<CR>
+	noremap <silent> <buffer> <C-Right>        :cal <SID>GetOrPutDir('r')<CR>
+	noremap <silent> <buffer> <S-Left>         :cal <SID>GetOrPutDir('l')<CR>
+	noremap <silent> <buffer> <S-Right>        :cal <SID>GetOrPutDir('r')<CR>
+	noremap <silent> <buffer> <leader>o        :cal <SID>PutDir()<CR>
+	noremap <silent> <buffer> <M-O>            :cal <SID>PutDir()<CR>
+	noremap <silent> <buffer> <F5>             :cal <SID>FileCopy()<CR>
+	noremap <silent> <buffer> <F6>             :cal <SID>FileMove()<CR>
+	noremap <silent> <buffer> <F8>             :cal <SID>FileDelete()<CR>
+	noremap <silent> <buffer> <DEL>            :cal <SID>FileDelete()<CR>
+	noremap <silent> <buffer> <C-U>            :cal <SID>ExchangeDirs()<CR>
+	noremap <silent> <buffer> <leader>u        :cal <SID>ExchangeDirs()<CR>
+	noremap <silent> <buffer> <C-R>            :cal <SID>RefreshDisplays()<CR>
+	noremap <silent> <buffer> <leader>r        :cal <SID>RefreshDisplays()<CR>
+	noremap <silent> <buffer> <F10>            :cal VimCommanderToggle()<CR>
+	noremap <silent> <buffer> <F11>            :cal VimCommanderToggle()<CR>
+	noremap <silent> <buffer> <Insert>         :cal <SID>Select()<CR>
+	noremap <silent> <buffer> <C-kPlus>        :cal <SID>SelectPattern('*')<CR>
+	noremap <silent> <buffer> <leader><kPlus>  :cal <SID>SelectPattern('*')<CR>
+	noremap <silent> <buffer> <leader><kMinus> :cal <SID>DeSelectPattern('*')<CR>
+	noremap <silent> <buffer> <kPlus>          :cal <SID>SelectPatternAsk()<CR>
+	noremap <silent> <buffer> <kMinus>         :cal <SID>DeSelectPatternAsk()<CR>
 
-    noremap <silent> <buffer> <C-F11>   :cal <SID>SetMatchPattern()<CR>
-    noremap <silent> <buffer> <C-O>     :cal VimCommanderToggle()<CR>
+	noremap <silent> <buffer> <C-F11>          :cal <SID>SetMatchPattern()<CR>
+	noremap <silent> <buffer> <leader><F11>    :cal <SID>SetMatchPattern()<CR>
+	noremap <silent> <buffer> <C-O>            :cal VimCommanderToggle()<CR>
+	noremap <silent> <buffer> <leader>o        :cal VimCommanderToggle()<CR>
 
 endf
 
@@ -65,6 +74,7 @@ fu! VimCommanderToggle()
 endf
 
 fu!<SID>First()
+	cal <SID>SaveOpts()
 	cal <SID>InitOptions()
 	let s:path_left=getcwd()
 	let s:path_right=getcwd()
@@ -118,10 +128,20 @@ fu! <SID>VimCommanderShow()
 		endif
 	endif
 	norm z-
-	autocmd BufEnter    VimCommanderLeft  let g:lastside="VimCommanderLeft"
-	autocmd BufEnter    VimCommanderRight let g:lastside="VimCommanderRight"
+	autocmd BufEnter    VimCommanderLeft  cal <SID>LeftBufEnter()
+	autocmd BufEnter    VimCommanderRight cal <SID>RightBufEnter()
 	autocmd BufWinLeave VimCommanderLeft  cal VimCommanderToggle()
 	autocmd BufWinLeave VimCommanderRight cal VimCommanderToggle()
+endf
+
+fu! <SID>LeftBufEnter()
+	exe "cd ".<SID>MyPath()
+	let g:lastside="VimCommanderLeft"
+endf
+
+fu! <SID>RightBufEnter()
+	exe "cd ".<SID>MyPath()
+	let g:lastside="VimCommanderRight"
 endf
 
 fu! <SID>Close()
@@ -150,8 +170,51 @@ fu! <SID>Close()
 	let g:vimcommander_loaded=0
 	if bufwinnr("VimCommanderRight")!=-1
 		exe "new +buffer ".s:orig_buffer
+		cal <SID>LoadOpts()
 		exe 'wincmd w'
 		close
+	end
+endf
+
+fu! <SID>SaveOpts()
+	let s:scrollbind=&scrollbind
+	let s:wrap=&wrap
+	let s:nu=&nu
+	let s:buflisted=&buflisted
+	let s:number=&number
+	let s:incsearch=&incsearch
+endf
+
+fu! <SID>LoadOpts()
+	if s:scrollbind==1
+		set scrollbind
+	else
+		set noscrollbind
+	end
+	if s:wrap==1
+		set wrap
+	else
+		set nowrap
+	end
+	if s:nu==1
+		set nu
+	else
+		set nonu
+	end
+	if s:buflisted==1
+		set buflisted
+	else
+		set nobuflisted
+	end
+	if s:number==1
+		set number
+	else
+		set nonumber
+	end
+	if s:incsearch==1
+		set incsearch
+	else
+		set noincsearch
 	end
 endf
 
@@ -245,6 +308,7 @@ endf
 fu! <SID>ProvideBuffer()
 	"winc j
 	new
+	cal <SID>LoadOpts()
 endf
 
 fu! <SID>FileView()
@@ -293,11 +357,19 @@ fu! <SID>NewFileEdit()
 endf
 
 fu! <SID>MyPath()
-	if winbufnr(0) == s:bufnr_left
-		return s:path_left."/"
+	if exists("s:bufnr_left")
+		if winbufnr(0) == s:bufnr_left
+			return s:path_left."/"
+		else
+			return s:path_right."/"
+		en
 	else
-		return s:path_right."/"
-	en
+		if winbufnr(0) == s:bufnr_right
+			return s:path_left."/"
+		else
+			return s:path_right."/"
+		en
+	end
 endf
 
 fu! <SID>BuildTree(path)
@@ -315,6 +387,7 @@ fu! <SID>BuildTree(path)
 	else
 		let s:path_left=path
 	end
+	exe "cd ".<SID>MyPath()
 	cal setline(1,path)
 	setl noma nomod
 	" pass -1 as xpos to start at column 0
@@ -486,11 +559,11 @@ fu! <SID>FileMove()
 				end
 				if opt=~"^[yYAa]$"
 					" move file
-					system('mv -f "'.filename.'" "'.newfilename.'"')
+					cal system('mv -f "'.filename.'" "'.newfilename.'"')
 				en
 			el
 				" move file
-				system('mv "'.filename.'" "'.newfilename.'"')
+				cal system('mv "'.filename.'" "'.newfilename.'"')
 			en
 		en
 		if strlen(b:vimcommander_selected)>0
@@ -718,13 +791,13 @@ fu! <SID>DeSelectPattern(pattern)
 endf
 
 fu! <SID>SelectPatternAsk()
-	let pattern=input("Select with pattern: ",'*')
+	let pattern=input("Select with pattern: ")
 	cal <SID>SelectPattern(pattern)
 	echo ""
 endf
 
 fu! <SID>DeSelectPatternAsk()
-	let pattern=input("Deselect with pattern: ",'*')
+	let pattern=input("Deselect with pattern: ")
 	cal <SID>DeSelectPattern(pattern)
 	echo ""
 endf
@@ -874,23 +947,10 @@ fu! <SID>OnDoubleClick(close_explorer)
 		el
 			" try to resolve filename
 			" and open in other window
-			let path=<SID>GetPathName(xpos,ypos)
 			if filereadable(path)
-				" go to last accessed buffer
-				winc j
+				cal <SID>FileEdit()
 				" append sequence for opening file
 				"exe "cd ".fnamemodify(path,":h")
-				exe "e ".path
-				if s:close_explorer==2 "eh view
-					setl noma
-					setl ro
-				else
-					setl ma
-					setl noro
-				end
-			en
-			if s:close_explorer==1
-				cal VimCommanderToggle()
 			en
 		en
 	el
