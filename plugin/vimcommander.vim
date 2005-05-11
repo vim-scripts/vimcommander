@@ -1,4 +1,4 @@
-"$Id: vimcommander.vim,v 1.54.2.2 2004/02/27 02:23:01 lpenz Exp $
+"$Id: vimcommander.vim,v 1.54.2.8 2005/05/12 02:13:10 lpenz Exp $
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Name:         vimcommander
 " Description:  total-commander-like file manager for vim.
@@ -13,10 +13,11 @@
 "                   in which this script is based,
 "               Christian Ghisler, the author of Total Commander, for the best
 "                   *-commander around. (http://www.ghisler.com)
-"               Mathieu Clabaut <mathieu.clabaut@free.fr>, the author of
-"                    vimspell, from where I got how to autogenerate the 
-"                    help from within the script.
+"               Mathieu Clabaut, the author of vimspell, from where I got how
+"                   to autogenerate the help from within the script.
 "               Diego Morales, fixes and suggestions.
+"               Yves Rutschle, fixes and suggestions.
+"               Helmut Stiegler, fixes.
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Section: Documentation 
 "
@@ -126,6 +127,9 @@ fu! <SID>VimCommanderShow()
 	end
 	"close all windows
 	let s:buffer_to_load=expand("%:p")
+	new
+	winc p
+	close
 	"let v:errmsg=''
 	"while v:errmsg==''
 	"	silent! close
@@ -365,7 +369,7 @@ fu! <SID>NewFileEdit()
 	end
 	"cal <SID>ProvideBuffer()
 	"exe "edit ".newfile
-	let s:buffer_to_load=path
+	let s:buffer_to_load=newfile
 	cal <SID>Close()
 	setlocal ma
 	setlocal noro
@@ -439,6 +443,9 @@ endf
 fu! <SID>DirCreate()
 	let newdir=""
 	let newdir=input("New directory name: ","")
+	if newdir==""
+		return
+	end
 	if filereadable(newdir)
 		echo "File with that name exists."
 		return
@@ -447,7 +454,7 @@ fu! <SID>DirCreate()
 		echo "Directory already exists."
 		return 
 	end
-	let i=system("mkdir ".<SID>MyPath().newdir)
+	let i=system("mkdir \"".<SID>MyPath().newdir."\"")
 	cal <SID>RefreshDisplays()
 	norm! gg1j
 	cal search("^+".newdir."$")
@@ -516,6 +523,10 @@ fu! <SID>FileCopy()
 		if filereadable(filename) || isdirectory(filename)
 			if strlen(b:vimcommander_selected)==0
 				let newfilename=input("Copy ".filename." to: ",otherfilename)
+				if newfilename==""
+					cal <SID>RefreshDisplays()
+					return
+				end
 			else
 				let newfilename=otherfilename
 			end
@@ -576,6 +587,10 @@ fu! <SID>FileMove()
 		if filereadable(filename) || isdirectory(filename)
 			if strlen(b:vimcommander_selected)==0
 				let newfilename=input("Move ".filename." to: ",otherfilename)
+				if newfilename==""
+					cal <SID>RefreshDisplays()
+					return
+				end
 			else
 				let newfilename=otherfilename
 			end
@@ -843,12 +858,18 @@ endf
 
 fu! <SID>SelectPatternAsk()
 	let pattern=input("Select with pattern: ")
+	if pattern == ""
+		return
+	endif
 	cal <SID>SelectPattern(pattern)
 	echo ""
 endf
 
 fu! <SID>DeSelectPatternAsk()
 	let pattern=input("Deselect with pattern: ")
+	if pattern == ""
+		return
+	endif
 	cal <SID>DeSelectPattern(pattern)
 	echo ""
 endf
@@ -1214,7 +1235,7 @@ if exists("b:vimcommander_install_doc") && b:vimcommander_install_doc==0
 end
 
 let s:revision=
-			\ substitute("$Revision: 1.54.2.2 $",'\$\S*: \([.0-9]\+\) \$','\1','')
+			\ substitute("$Revision: 1.54.2.8 $",'\$\S*: \([.0-9]\+\) \$','\1','')
 silent! let s:install_status =
 			\ <SID>SpellInstallDocumentation(expand('<sfile>:p'), s:revision)
 if (s:install_status == 1)
@@ -1337,6 +1358,8 @@ CONTENT                                                *vimcommander-contents*
     - Options for some of the behaviors.
     - Directory bookmarks.
     - Make selection by pattern faster.
+	- Rename-in-place.
+	- copy-paste mechanism.
 
 ==============================================================================
 6. VimCommander Links                                     *vimcommander-links*
