@@ -1,4 +1,4 @@
-"$Id: vimcommander.vim version 68 $
+"$Id: vimcommander.vim version 69 $
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Name:         vimcommander
 " Description:  total-commander-like file manager for vim.
@@ -85,6 +85,8 @@ fu! <SID>CommanderMappings()
 	noremap <silent> <buffer> <leader><kMinus> :cal <SID>DeSelectPattern('*')<CR>
 	noremap <silent> <buffer> <kPlus>          :cal <SID>SelectPatternAsk()<CR>
 	noremap <silent> <buffer> <kMinus>         :cal <SID>DeSelectPatternAsk()<CR>
+	noremap <silent> <buffer> +                :cal <SID>SelectPatternAsk()<CR>
+	noremap <silent> <buffer> -                :cal <SID>DeSelectPatternAsk()<CR>
 	"Dir history
 	noremap <silent> <buffer> <C-t>            :cal <SID>PrevDir()<CR>
 	noremap <silent> <buffer> <leader>t        :cal <SID>PrevDir()<CR>
@@ -1228,7 +1230,7 @@ if exists("b:vimcommander_install_doc") && b:vimcommander_install_doc==0
 end
 
 let s:revision=
-			\ substitute("$Revision: 68 $",'\$\S*: \([.0-9]\+\) \$','\1','')
+			\ substitute("$Revision: 69 $",'\$\S*: \([.0-9]\+\) \$','\1','')
 silent! let s:install_status =
 			\ <SID>SpellInstallDocumentation(expand('<sfile>:p'), s:revision)
 if (s:install_status == 1)
