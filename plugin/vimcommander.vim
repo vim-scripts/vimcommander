@@ -1,4 +1,4 @@
-"$Id: vimcommander.vim version 69 $
+"$Id: vimcommander.vim version 73 $
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Name:         vimcommander
 " Description:  total-commander-like file manager for vim.
@@ -13,10 +13,12 @@
 "                   in which this script is based,
 "               Christian Ghisler, the author of Total Commander, for the best
 "                   *-commander around. (http://www.ghisler.com)
-"               Mathieu Clabaut <mathieu.clabaut@free.fr>, the author of
-"                    vimspell, from where I got how to autogenerate the 
+"               Mathieu Clabaut <mathieu.clabaut at free dot fr>, the author
+"                    of vimspell, from where I got how to autogenerate the 
 "                    help from within the script.
 "               Diego Morales, fixes and suggestions.
+"               Vladimír Marek <vlmarek at volny dot cz>, fix for files with
+"                    with spaces and refactoring.
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Section: Documentation 
 "
@@ -348,7 +350,7 @@ fu! <SID>FileEdit()
 	"cal <SID>ProvideBuffer()
 	let s:buffer_to_load=path
 	cal <SID>Close()
-	exe "edit ".path
+	exe "edit ".<SID>VimEscape(path)
 endf
 
 fu! <SID>NewFileEdit()
@@ -368,7 +370,7 @@ fu! <SID>NewFileEdit()
 	"cal <SID>ProvideBuffer()
 	let s:buffer_to_load=newfile
 	cal <SID>Close()
-	exe "edit ".newfile
+	exe "edit ".<SID>VimEscape(newfile)
 endf
 
 fu! <SID>MyPath()
@@ -447,7 +449,7 @@ fu! <SID>DirCreate()
 		echo "Directory already exists."
 		return 
 	end
-	let i=system("mkdir ".<SID>MyPath().newdir)
+	let i=system("mkdir ".shellescape(<SID>MyPath().newdir))
 	cal <SID>RefreshDisplays()
 	norm! gg1j
 	cal search("^+".newdir."$")
@@ -493,10 +495,13 @@ fu! <SID>PathUnderCursor()
 	let xpos=2
 	let ypos=line('.')
 	if ypos>1 "not on line 1
-		let rv=<SID>GetPathName(xpos,ypos)
-		return escape(rv, " ")
+		return <SID>GetPathName(xpos,ypos)
 	end
 	return ""
+endf
+
+fu! <SID>VimEscape(name)
+	return escape(a:name, " '()\\\"|#%*?+")
 endf
 
 fu! <SID>FileCopy(samedir)
@@ -537,6 +542,7 @@ fu! <SID>FileCopy(samedir)
 				echo "Can't overwrite file ".newfilename." with directory"
 				return
 			end
+			let do_copy=1
 			if filereadable(newfilename)
 				if opt!~"^[AakK]$"
 					let opt=input("File ".newfilename." exists, overwrite? [nkya] ","y")
@@ -545,13 +551,12 @@ fu! <SID>FileCopy(samedir)
 						return
 					end
 				end
-				if opt=~"^[yYAa]$"
-					" copy file
-					cal system('cp -Rf "'.filename.'" "'.newfilename.'"')
-				en
-			el
+				let do_copy = opt=~"^[yYAa]$"
+			end
+
+			if (do_copy)
 				" copy file
-				cal system('cp -Rf "'.filename.'" "'.newfilename.'"')
+				cal system("cp -Rf ".shellescape(filename)." ".shellescape(newfilename))
 			en
 		en
 		if strlen(b:vimcommander_selected)>0
@@ -610,6 +615,7 @@ fu! <SID>FileMove(rename)
 				echo "Can't overwrite directory with directory"
 				return
 			end
+			let do_move=1
 			if filereadable(newfilename)
 				if opt!~"^[AakK]$"
 					let opt=input("File ".newfilename." exists, overwrite? [nkya] ","y")
@@ -618,13 +624,13 @@ fu! <SID>FileMove(rename)
 						return
 					end
 				end
-				if opt=~"^[yYAa]$"
-					" move file
-					cal system('mv -f "'.filename.'" "'.newfilename.'"')
-				en
-			el
+
+				do_move = opt=~"^[yYAa]$"
+			en
+
+			if (do_move)
 				" move file
-				cal system('mv "'.filename.'" "'.newfilename.'"')
+				cal system('mv '.shellescape(filename).' '.shellescape(newfilename))
 			en
 		en
 		if strlen(b:vimcommander_selected)>0
@@ -661,7 +667,7 @@ fu! <SID>FileDelete()
 				end
 			end
 			if opt=~"^[yYAa]$"
-				cal system('rm -rf "'.filename.'"')
+				cal system("rm -rf ".shellescape(filename))
 			en
 		en
 		if strlen(b:vimcommander_selected)>0
@@ -955,27 +961,11 @@ fu! <SID>InitOptions()
 	let s:close_explorer_after_open=0
 endf
 
-fu! <SID>InsertFilename()
-	norm! 4|
-	let filename=<SID>GetPathName(col('.')-1,line('.'))
-	winc p
-	exe "norm! a".filename
-endf
-
-fu! <SID>InsertFileContent()
-	norm! 4|
-	let filename=<SID>GetPathName(col('.')-1,line('.'))
-	if filereadable(filename)
-		winc p
-		exe "r ".filename
-	en
-endf
-
 fu! <SID>FileSee()
 	norm! 4|
 	let filename=<SID>GetPathName(col('.')-1,line('.'))
 	if filereadable(filename)
-		let i=system("see ".filename."&")
+		let i=system("see ".shellescape(filename)."&")
 	en
 endf
 
@@ -1230,7 +1220,7 @@ if exists("b:vimcommander_install_doc") && b:vimcommander_install_doc==0
 end
 
 let s:revision=
-			\ substitute("$Revision: 69 $",'\$\S*: \([.0-9]\+\) \$','\1','')
+			\ substitute("$Revision: 73 $",'\$\S*: \([.0-9]\+\) \$','\1','')
 silent! let s:install_status =
 			\ <SID>SpellInstallDocumentation(expand('<sfile>:p'), s:revision)
 if (s:install_status == 1)
