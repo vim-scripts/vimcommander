@@ -1,4 +1,4 @@
-"$Id: vimcommander.vim version 73 $
+"$Id: vimcommander.vim version 75 $
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Name:         vimcommander
 " Description:  total-commander-like file manager for vim.
@@ -18,7 +18,9 @@
 "                    help from within the script.
 "               Diego Morales, fixes and suggestions.
 "               Vladimír Marek <vlmarek at volny dot cz>, fix for files with
-"                    with spaces, refactoring and fix for splitright.
+"                    with spaces and refactoring.
+"               Oleg Popov <dev-random at mail dot ru>, fix for browsing
+"                    hidden files.
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Section: Documentation 
 "
@@ -1081,7 +1083,7 @@ fu! <SID>TreeExpand(xpos,ypos,path)
 	let dirlist=""
 	" extra globbing for hidden files
 	if s:show_hidden_files
-		let dirlist=glob(path.'/.*'.s:file_match_pattern)."\n"
+		let dirlist=glob(path.'/.'.s:file_match_pattern)."\n"
 	en
 	let dirlist=dirlist.globpath(path, s:file_match_pattern)."\n"
 	wh strlen(dirlist)>0
@@ -1223,7 +1225,7 @@ if exists("b:vimcommander_install_doc") && b:vimcommander_install_doc==0
 end
 
 let s:revision=
-			\ substitute("$Revision: 73 $",'\$\S*: \([.0-9]\+\) \$','\1','')
+			\ substitute("$Revision: 75 $",'\$\S*: \([.0-9]\+\) \$','\1','')
 silent! let s:install_status =
 			\ <SID>SpellInstallDocumentation(expand('<sfile>:p'), s:revision)
 if (s:install_status == 1)
