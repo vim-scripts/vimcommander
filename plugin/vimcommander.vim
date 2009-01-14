@@ -1,4 +1,4 @@
-"$Id: vimcommander.vim version 75 $
+"$Id: vimcommander.vim version 76 $
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Name:         vimcommander
 " Description:  total-commander-like file manager for vim.
@@ -21,6 +21,7 @@
 "                    with spaces and refactoring.
 "               Oleg Popov <dev-random at mail dot ru>, fix for browsing
 "                    hidden files.
+"               Devix for dir escape patch.
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Section: Documentation 
 "
@@ -191,14 +192,14 @@ endf
 
 fu! <SID>LeftBufEnter()
 	if g:vimcommander_shallcd==1
-		exe "cd ".<SID>MyPath()
+		exe "cd ".escape(<SID>MyPath())
 	end
 	let g:vimcommander_lastside="VimCommanderLeft"
 endf
 
 fu! <SID>RightBufEnter()
 	if g:vimcommander_shallcd==1
-		exe "cd ".<SID>MyPath()
+		exe "cd ".escape(<SID>MyPath())
 	end
 	let g:vimcommander_lastside="VimCommanderRight"
 endf
@@ -411,7 +412,7 @@ fu! <SID>BuildTreeNoPrev(path)
 		let s:path_left=path
 	end
 	if g:vimcommander_shallcd==1
-		exe "cd ".<SID>MyPath()
+		exe "cd ".escape(<SID>MyPath())
 	end
 	cal setline(1,path)
 	setl noma nomod
@@ -1225,7 +1226,7 @@ if exists("b:vimcommander_install_doc") && b:vimcommander_install_doc==0
 end
 
 let s:revision=
-			\ substitute("$Revision: 75 $",'\$\S*: \([.0-9]\+\) \$','\1','')
+			\ substitute("$Revision: 76 $",'\$\S*: \([.0-9]\+\) \$','\1','')
 silent! let s:install_status =
 			\ <SID>SpellInstallDocumentation(expand('<sfile>:p'), s:revision)
 if (s:install_status == 1)
