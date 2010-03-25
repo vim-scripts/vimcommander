@@ -1,6 +1,6 @@
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Name:         vimcommander
-" Version:      "0.79"
+" Version:      "0.80"
 " Description:  total-commander-like file manager for vim.
 " Author:       Leandro Penz <lpenz AT terra DOT com DOT br>
 " Maintainer:   Leandro Penz <lpenz AT terra DOT com DOT br>
@@ -83,7 +83,6 @@ fu! <SID>CommanderMappings()
 	noremap <silent> <buffer> <leader>u        :cal <SID>ExchangeDirs()<CR>
 	noremap <silent> <buffer> <C-R>            :cal <SID>RefreshDisplays()<CR>
 	noremap <silent> <buffer> <leader>r        :cal <SID>RefreshDisplays()<CR>
-	noremap <silent> <buffer> <C-H>            :cal <SID>ShowHiddenFilesToggle()<CR>
 	noremap <silent> <buffer> <leader>h        :cal <SID>ShowHiddenFilesToggle()<CR>
 	"File-selection
 	noremap <silent> <buffer> <Insert>         :cal <SID>Select()<CR>
