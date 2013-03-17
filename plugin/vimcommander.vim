@@ -1,6 +1,6 @@
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Name:         vimcommander
-" Version:      "0.80"
+" Version:      "0.81"
 " Description:  total-commander-like file manager for vim.
 " Author:       Leandro Penz <lpenz AT terra DOT com DOT br>
 " Maintainer:   Leandro Penz <lpenz AT terra DOT com DOT br>
@@ -8,24 +8,27 @@
 " Licence:      This program is free software; you can redistribute it
 "                   and/or modify it under the terms of the GNU General Public
 "                   License.  See http://www.gnu.org/copyleft/gpl.txt
-" Credits:      Patrick Schiel, the author of Opsplorer.vim 
+" Credits:      Patrick Schiel, the author of Opsplorer.vim
 "                   (http://www.vim.org/scripts/script.php?script_id=362)
 "                   in which this script is based,
 "               Christian Ghisler, the author of Total Commander, for the best
 "                   *-commander around. (http://www.ghisler.com)
 "               Mathieu Clabaut <mathieu.clabaut at free dot fr>, the author
-"                    of vimspell, from where I got how to autogenerate the 
+"                    of vimspell, from where I got how to autogenerate the
 "                    help from within the script.
 "               Diego Morales, fixes and suggestions.
-"               VladimÃ­r Marek <vlmarek at volny dot cz>, fix for files with
+"               Vladimír Marek <vlmarek at volny dot cz>, fix for files with
 "                    with spaces and refactoring.
 "               Oleg Popov <dev-random at mail dot ru>, fix for browsing
 "                    hidden files.
 "               Lajos Zaccomer <lajos@zaccomer.org>, custom starting paths,
-"                    change dir dialog.
+"                    change dir dialog, windows fixes, etc.
+"               Zoltan Dezso <dezso.zoltan@gmail.co>, windows fix for parent
+"                    directory traversal, add total commander-like C-PageUp
+"               Denis <woofterrier@gmail.com>, for windows fixes.
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-" Section: Documentation 
+" Section: Documentation
 "
 " Documentation should be available by ":help vimcommander" command, once the
 " script has been copied in you .vim/plugin directory.
@@ -108,6 +111,14 @@ fu! <SID>CommanderMappings()
 	"ChangeDir dialog, required in windows:
 	noremap <silent> <buffer> <leader>c        :cal <SID>ChangeDir()<CR>
 	noremap <silent> <buffer> cd               :cal <SID>ChangeDir()<CR>
+
+	"Directory Up/Down
+	noremap <silent> <buffer> <C-PageUp>       :cal <SID>BuildParentTree()<CR>
+	noremap <silent> <buffer> <C-PageDown>     :cal <SID>OnDoubleClick()<CR>
+endf
+
+fu! <SID>MsDos(filename)
+   return substitute(shellescape(a:filename),'/','\\','g')
 endf
 
 fu! VimCommanderToggle()
@@ -222,7 +233,7 @@ endf
 fu! <SID>Close()
 	autocmd! BufEnter VimCommanderLeft
 	autocmd! BufEnter VimCommanderRight
-	autocmd! BufWinLeave VimCommanderLeft 
+	autocmd! BufWinLeave VimCommanderLeft
 	autocmd! BufWinLeave VimCommanderRight
 	let winnum = bufwinnr(s:bufnr_left)
 	if winnum != -1
@@ -363,7 +374,11 @@ fu! <SID>FileView()
 	let opt=""
 	while strlen(name)>0
 		if filereadable(filename)
-			cal system("(see ".shellescape(filename).") &")
+			if has("unix")
+				cal system("(see ".shellescape(filename).") &")
+			else
+				exec "silent ! start \"\" \"".substitute(filename, "/", "\\", "g")."\""
+			endif
 		en
 		if strlen(b:vimcommander_selected)>0
 			let name=<SID>SelectedNum(b:vimcommander_selected, i)
@@ -483,7 +498,7 @@ fu! <SID>DirCreate()
 	end
 	if isdirectory(newdir)
 		echo "Directory already exists."
-		return 
+		return
 	end
 	let i=system("mkdir ".shellescape(<SID>MyPath().newdir))
 	cal <SID>RefreshDisplays()
@@ -593,7 +608,11 @@ fu! <SID>FileCopy(samedir)
 
 			if (do_copy)
 				" copy file
+              if has("unix")
 				cal system("cp -Rf ".shellescape(filename)." ".shellescape(newfilename))
+			  else
+                cal system("copy ".<SID>MsDos(filename)." ".<SID>MsDos(newfilename))
+              end
 			en
 		en
 		if strlen(b:vimcommander_selected)>0
@@ -667,7 +686,11 @@ fu! <SID>FileMove(rename)
 
 			if (do_move)
 				" move file
+              if has("unix")
 				cal system('mv '.shellescape(filename).' '.shellescape(newfilename))
+			  else
+                cal system('move '.<SID>MsDos(filename).' '.<SID>MsDos(newfilename))
+              end
 			en
 		en
 		if strlen(b:vimcommander_selected)>0
@@ -704,7 +727,15 @@ fu! <SID>FileDelete()
 				end
 			end
 			if opt=~"^[yYAa]$"
+              if has("unix")
 				cal system("rm -rf ".shellescape(filename))
+		      else
+                  if isdirectory(filename)
+                    cal system("rmdir /s /q ".<SID>MsDos(filename))
+                  else
+                    cal system("del /q ".<SID>MsDos(filename))
+                  end
+              end
 			en
 		en
 		if strlen(b:vimcommander_selected)>0
@@ -812,7 +843,7 @@ fu! <SID>Select()
 		let b:vimcommander_selected=tmp
 		setl ma
 		norm! |l
-		norm! s 
+		norm! s
 		setl noma
 		cal <SID>GotoNextEntry()
 	else " select
@@ -1007,9 +1038,13 @@ fu! <SID>FileSee()
 endf
 
 fu! <SID>BuildParentTree()
-	norm! gg$F/
+	if has("unix")
+		norm! gg$F/
+	else
+		norm! gg$F\
+	end
 	let mydir=getline(line('.'))
-	let mypos="^..+".strpart(mydir, strridx(mydir,'/')+1)."$"
+	let mypos="^..+".strpart(mydir, strridx(mydir,s:slash_char)+1)."$"
 	cal <SID>OnDoubleClick()
 	call search(mypos)
 	norm! 4|
